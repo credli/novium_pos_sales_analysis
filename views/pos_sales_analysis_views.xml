@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="pos_sales_analysis_view_pivot" model="ir.ui.view">
+        <field name="name">pos.sales.analysis.pivot</field>
+        <field name="model">pos.sales.analysis</field>
+        <field name="arch" type="xml">
+            <pivot string="POS Sales Analysis" sample="1">
+                <field name="hour" type="row"/>
+                <field name="item_class" type="col"/>
+                <field name="price_subtotal" type="measure"/>
+                <field name="qty" type="measure"/>
+                <field name="order_count" type="measure"/>
+            </pivot>
+        </field>
+    </record>
+
+    <record id="pos_sales_analysis_view_graph" model="ir.ui.view">
+        <field name="name">pos.sales.analysis.graph</field>
+        <field name="model">pos.sales.analysis</field>
+        <field name="arch" type="xml">
+            <graph string="POS Sales Analysis" type="bar" sample="1">
+                <field name="hour"/>
+                <field name="price_subtotal" type="measure"/>
+            </graph>
+        </field>
+    </record>
+
+    <record id="pos_sales_analysis_view_list" model="ir.ui.view">
+        <field name="name">pos.sales.analysis.list</field>
+        <field name="model">pos.sales.analysis</field>
+        <field name="arch" type="xml">
+            <list string="POS Sales Analysis" create="0" edit="0" delete="0">
+                <field name="date"/>
+                <field name="order_id"/>
+                <field name="config_id"/>
+                <field name="product_id"/>
+                <field name="item_class"/>
+                <field name="qty" sum="Total"/>
+                <field name="price_subtotal" sum="Total"/>
+                <field name="margin" sum="Total"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="pos_sales_analysis_view_search" model="ir.ui.view">
+        <field name="name">pos.sales.analysis.search</field>
+        <field name="model">pos.sales.analysis</field>
+        <field name="arch" type="xml">
+            <search string="POS Sales Analysis">
+                <field name="product_id"/>
+                <field name="order_id"/>
+                <field name="partner_id"/>
+                <field name="user_id"/>
+                <field name="config_id"/>
+                <field name="product_categ_id"/>
+                <field name="pos_categ_id"/>
+                <filter name="hero" string="Hero Items" domain="[('item_class', '=', 'hero')]"/>
+                <filter name="core" string="Core Items" domain="[('item_class', '=', 'core')]"/>
+                <filter name="dog" string="Dog Items" domain="[('item_class', '=', 'dog')]"/>
+                <separator/>
+                <filter name="date" string="Order Date" date="date"/>
+                <group expand="0" string="Group By">
+                    <filter name="group_hour" string="Hour" context="{'group_by': 'hour'}"/>
+                    <filter name="group_weekday" string="Weekday" context="{'group_by': 'weekday'}"/>
+                    <filter name="group_day_part" string="Day Part" context="{'group_by': 'day_part'}"/>
+                    <filter name="group_item_class" string="Item Class" context="{'group_by': 'item_class'}"/>
+                    <filter name="group_product" string="Product" context="{'group_by': 'product_id'}"/>
+                    <filter name="group_categ" string="Product Category" context="{'group_by': 'product_categ_id'}"/>
+                    <filter name="group_pos_categ" string="POS Category" context="{'group_by': 'pos_categ_id'}"/>
+                    <filter name="group_config" string="Point of Sale" context="{'group_by': 'config_id'}"/>
+                    <filter name="group_user" string="Cashier" context="{'group_by': 'user_id'}"/>
+                    <filter name="group_payment" string="Payment Method" context="{'group_by': 'payment_method_id'}"/>
+                    <filter name="group_day" string="Day" context="{'group_by': 'day'}"/>
+                    <filter name="group_month" string="Month" context="{'group_by': 'month'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <record id="pos_sales_analysis_action" model="ir.actions.act_window">
+        <field name="name">Sales Analysis</field>
+        <field name="res_model">pos.sales.analysis</field>
+        <field name="view_mode">pivot,graph,list</field>
+        <field name="search_view_id" ref="pos_sales_analysis_view_search"/>
+    </record>
+
+    <menuitem id="pos_sales_analysis_menu"
+              name="Sales Analysis"
+              parent="point_of_sale.menu_point_rep"
+              action="pos_sales_analysis_action"
+              sequence="5"
+              groups="point_of_sale.group_pos_manager"/>
+</odoo>
