@@ -37,7 +37,7 @@ class PosSalesAnalysis(models.Model):
     order_id = fields.Many2one("pos.order", string="Order", readonly=True)
     partner_id = fields.Many2one("res.partner", string="Customer", readonly=True)
     user_id = fields.Many2one("res.users", string="Cashier", readonly=True)
-    config_id = fields.Many2one("pos.config", string="Point of Sale", readonly=True)
+    config_id = fields.Many2one("pos.config", string="Point of Sale (Branch)", readonly=True)
     session_id = fields.Many2one("pos.session", string="Session", readonly=True)
     company_id = fields.Many2one("res.company", string="Company", readonly=True)
     payment_method_id = fields.Many2one(
@@ -52,8 +52,8 @@ class PosSalesAnalysis(models.Model):
         string="Status", readonly=True)
 
     qty = fields.Float(string="Quantity", readonly=True)
-    price_subtotal = fields.Float(string="Revenue (excl. tax)", readonly=True)
-    price_total = fields.Float(string="Revenue (incl. tax)", readonly=True)
+    price_subtotal = fields.Float(string="Revenue excl. tax", readonly=True)
+    price_total = fields.Float(string="Revenue (TTC)", readonly=True)
     discount_amount = fields.Float(string="Discount", readonly=True)
     cost = fields.Float(string="Cost", readonly=True)
     margin = fields.Float(string="Margin", readonly=True)
@@ -64,7 +64,19 @@ class PosSalesAnalysis(models.Model):
 
     def _query(self):
         return f"""
-            WITH base AS (
+            WITH order_payment AS (
+                SELECT DISTINCT ON (pos_order_id)
+                    pos_order_id, payment_method_id
+                FROM pos_payment
+                ORDER BY pos_order_id, id
+            ),
+            tmpl_pos_categ AS (
+                SELECT DISTINCT ON (product_template_id)
+                    product_template_id, pos_category_id
+                FROM pos_category_product_template_rel
+                ORDER BY product_template_id, pos_category_id
+            ),
+            base AS (
                 SELECT
                     l.id AS id,
                     s.id AS order_id,
@@ -88,13 +100,8 @@ class PosSalesAnalysis(models.Model):
                     (l.price_subtotal - COALESCE(l.total_cost, 0))
                         / COALESCE(NULLIF(s.currency_rate, 0), 1.0) AS margin,
                     1.0 / COUNT(*) OVER (PARTITION BY s.id) AS order_count,
-                    (SELECT (array_agg(pp.payment_method_id ORDER BY pp.id))[1]
-                       FROM pos_payment pp WHERE pp.pos_order_id = s.id) AS payment_method_id,
-                    (SELECT pc.id
-                       FROM pos_category_product_template_rel rel
-                       JOIN pos_category pc ON pc.id = rel.pos_category_id
-                      WHERE rel.product_template_id = pt.id
-                      ORDER BY pc.id LIMIT 1) AS pos_categ_id
+                    op.payment_method_id,
+                    tpc.pos_category_id AS pos_categ_id
                 FROM pos_order_line l
                 JOIN pos_order s ON s.id = l.order_id
                 JOIN pos_session ps ON ps.id = s.session_id
@@ -102,6 +109,8 @@ class PosSalesAnalysis(models.Model):
                 LEFT JOIN res_partner cp ON cp.id = co.partner_id
                 LEFT JOIN product_product p ON p.id = l.product_id
                 LEFT JOIN product_template pt ON pt.id = p.product_tmpl_id
+                LEFT JOIN order_payment op ON op.pos_order_id = s.id
+                LEFT JOIN tmpl_pos_categ tpc ON tpc.product_template_id = pt.id
                 WHERE s.state IN ('paid', 'done', 'invoiced')
             ),
             product_month AS (
@@ -164,6 +173,31 @@ class PosSalesAnalysis(models.Model):
         """
 
     def init(self):
-        tools.drop_view_if_exists(self.env.cr, self._table)
-        self.env.cr.execute(
-            f"CREATE OR REPLACE VIEW {self._table} AS ({self._query()})")
+        """(Re)create the report as a materialized view.
+
+        The report is heavy (window functions over all POS lines), so it is
+        materialized, indexed and refreshed by a cron / the "Refresh Data" menu.
+        """
+        cr = self.env.cr
+        cr.execute("SELECT relkind FROM pg_class WHERE oid = to_regclass(%s)", [self._table])
+        row = cr.fetchone()
+        if row and row[0] == "m":
+            cr.execute(f"DROP MATERIALIZED VIEW {self._table} CASCADE")
+        elif row:
+            cr.execute(f"DROP VIEW {self._table} CASCADE")
+        cr.execute(
+            f"CREATE MATERIALIZED VIEW {self._table} AS ({self._query()}) WITH DATA")
+        t = self._table
+        cr.execute(f"CREATE UNIQUE INDEX {t}_id_idx ON {t} (id)")
+        cr.execute(f"CREATE INDEX {t}_day_config_idx ON {t} (day, config_id)")
+        cr.execute(f"CREATE INDEX {t}_date_idx ON {t} (date)")
+        cr.execute(f"CREATE INDEX {t}_product_idx ON {t} (product_id)")
+        cr.execute(f"CREATE INDEX {t}_company_idx ON {t} (company_id)")
+
+    def _refresh_view(self):
+        """Refresh the data without blocking readers."""
+        self.env.cr.execute(f"REFRESH MATERIALIZED VIEW CONCURRENTLY {self._table}")
+        return True
+
+    def _cron_refresh(self):
+        self._refresh_view()

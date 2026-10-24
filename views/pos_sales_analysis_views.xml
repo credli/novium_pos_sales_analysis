@@ -5,9 +5,9 @@
         <field name="model">pos.sales.analysis</field>
         <field name="arch" type="xml">
             <pivot string="POS Sales Analysis" sample="1">
-                <field name="hour" type="row"/>
+                <field name="config_id" type="row"/>
                 <field name="item_class" type="col"/>
-                <field name="price_subtotal" type="measure"/>
+                <field name="price_total" type="measure"/>
                 <field name="qty" type="measure"/>
                 <field name="order_count" type="measure"/>
             </pivot>
@@ -20,7 +20,7 @@
         <field name="arch" type="xml">
             <graph string="POS Sales Analysis" type="bar" sample="1">
                 <field name="hour"/>
-                <field name="price_subtotal" type="measure"/>
+                <field name="price_total" type="measure"/>
             </graph>
         </field>
     </record>
@@ -36,7 +36,8 @@
                 <field name="product_id"/>
                 <field name="item_class"/>
                 <field name="qty" sum="Total"/>
-                <field name="price_subtotal" sum="Total"/>
+                <field name="price_total" sum="Total"/>
+                <field name="price_subtotal" sum="Total" optional="hide"/>
                 <field name="margin" sum="Total"/>
             </list>
         </field>
@@ -58,7 +59,9 @@
                 <filter name="core" string="Core Items" domain="[('item_class', '=', 'core')]"/>
                 <filter name="dog" string="Dog Items" domain="[('item_class', '=', 'dog')]"/>
                 <separator/>
-                <filter name="date" string="Order Date" date="date"/>
+                <filter name="today" string="Today"
+                        domain="[('day', '=', context_today().strftime('%Y-%m-%d'))]"/>
+                <filter name="date" string="Order Date" date="day"/>
                 <group expand="0" string="Group By">
                     <filter name="group_hour" string="Hour" context="{'group_by': 'hour'}"/>
                     <filter name="group_weekday" string="Weekday" context="{'group_by': 'weekday'}"/>
@@ -82,6 +85,7 @@
         <field name="res_model">pos.sales.analysis</field>
         <field name="view_mode">pivot,graph,list</field>
         <field name="search_view_id" ref="pos_sales_analysis_view_search"/>
+        <field name="context">{'search_default_today': 1}</field>
     </record>
 
     <menuitem id="pos_sales_analysis_menu"
@@ -90,4 +94,30 @@
               action="pos_sales_analysis_action"
               sequence="5"
               groups="point_of_sale.group_pos_manager"/>
+
+    <record id="pos_sales_analysis_refresh_action" model="ir.actions.server">
+        <field name="name">Refresh Sales Analysis Data</field>
+        <field name="model_id" ref="model_pos_sales_analysis"/>
+        <field name="state">code</field>
+        <field name="code">
+model._refresh_view()
+action = env.ref('novium_pos_sales_analysis.pos_sales_analysis_action').read()[0]
+        </field>
+    </record>
+
+    <menuitem id="pos_sales_analysis_refresh_menu"
+              name="Refresh Sales Analysis"
+              parent="point_of_sale.menu_point_rep"
+              action="pos_sales_analysis_refresh_action"
+              sequence="6"
+              groups="point_of_sale.group_pos_manager"/>
+
+    <record id="pos_sales_analysis_cron" model="ir.cron">
+        <field name="name">POS Sales Analysis: refresh data</field>
+        <field name="model_id" ref="model_pos_sales_analysis"/>
+        <field name="state">code</field>
+        <field name="code">model._cron_refresh()</field>
+        <field name="interval_number">15</field>
+        <field name="interval_type">minutes</field>
+    </record>
 </odoo>
