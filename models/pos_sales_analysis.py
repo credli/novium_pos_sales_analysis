@@ -82,7 +82,7 @@ class PosSalesAnalysis(models.Model):
                     s.id AS order_id,
                     s.date_order AS date,
                     (s.date_order AT TIME ZONE 'UTC'
-                        AT TIME ZONE COALESCE(NULLIF(cp.tz, ''), 'UTC')) AS local_dt,
+                        AT TIME ZONE COALESCE(NULLIF(cp.tz, ''), NULLIF(up.tz, ''), 'UTC')) AS local_dt,
                     s.partner_id,
                     s.user_id,
                     s.company_id,
@@ -107,6 +107,8 @@ class PosSalesAnalysis(models.Model):
                 JOIN pos_session ps ON ps.id = s.session_id
                 JOIN res_company co ON co.id = s.company_id
                 LEFT JOIN res_partner cp ON cp.id = co.partner_id
+                LEFT JOIN res_users cu ON cu.id = s.user_id
+                LEFT JOIN res_partner up ON up.id = cu.partner_id
                 LEFT JOIN product_product p ON p.id = l.product_id
                 LEFT JOIN product_template pt ON pt.id = p.product_tmpl_id
                 LEFT JOIN order_payment op ON op.pos_order_id = s.id
